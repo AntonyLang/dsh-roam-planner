@@ -36,7 +36,7 @@ function parseSkill(text) {
 /**
  * @param {object} ctx Host context; `ctx.skills.register` returns a disposer.
  * @param {string} directory Absolute path to the package `skills/` directory.
- * @returns {Array<{name: string, ok: boolean, detail: string}>} what was registered
+ * @returns {{report: Array<{name: string, ok: boolean, detail: string}>, dispose: () => void}}
  */
 export function registerBundledSkills(ctx, directory) {
   const report = []

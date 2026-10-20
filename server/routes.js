@@ -247,6 +247,66 @@ export function registerRoutes(ctx, options) {
             if (typeof op.title === 'string' && op.title.trim() !== '') title = op.title.trim()
             continue
           }
+          // Whole-day overwrite: one day at a time, so two writers touching
+          // different days cannot clobber each other.
+          if (op.op === 'setDay') {
+            const payload = op.day && typeof op.day === 'object' ? op.day : null
+            if (!payload) throw new RoamError('invalid-day', 'setDay needs a day object', 400)
+            const index = Number.isFinite(op.index) ? Number(op.index) : Number(payload.index)
+            if (!Number.isFinite(index)) throw new RoamError('invalid-day', 'setDay needs an index', 400)
+            const next = {
+              index,
+              date: typeof payload.date === 'string' ? payload.date : '',
+              stops: Array.isArray(payload.stops) ? payload.stops : [],
+              legs: Array.isArray(payload.legs) ? payload.legs : [],
+            }
+            const existing = days.findIndex((day) => Number(day.index) === index)
+            if (!next.date && existing >= 0) next.date = days[existing].date
+            if (existing >= 0) days[existing] = next
+            else days.push(next)
+            continue
+          }
+          if (op.op === 'removeDay') {
+            const index = Number(op.index)
+            const at = days.findIndex((day) => Number(day.index) === index)
+            if (at < 0) throw new RoamError('day-not-found', `day '${op.index}' was not found`, 404)
+            days.splice(at, 1)
+            continue
+          }
+          // Single stop overwrite: replaces by id, appends when the id is new.
+          if (op.op === 'setStop') {
+            const payload = op.stop && typeof op.stop === 'object' ? op.stop : null
+            if (!payload) throw new RoamError('invalid-stop', 'setStop needs a stop object', 400)
+            const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+            if (name === '') throw new RoamError('invalid-stop', 'a stop needs a name', 400)
+            const target = Number.isFinite(op.dayIndex) ? dayOf(op.dayIndex) : dayOf(payload.dayIndex)
+            if (!target) throw new RoamError('day-not-found', `day '${op.dayIndex}' was not found`, 404)
+            let lat = Number(payload.lat)
+            let lng = Number(payload.lng)
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+              if (!geocoder) throw new RoamError('geocoder-unavailable', 'no geocoder is configured', 503)
+              const hit = await geocoder.geocode(name, { city })
+              if (!hit) throw new RoamError('place-not-found', `could not locate "${name}"`, 422)
+              lat = hit.lat
+              lng = hit.lng
+            }
+            const stopId =
+              typeof payload.id === 'string' && payload.id
+                ? payload.id
+                : `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+            const next = {
+              ...payload,
+              id: stopId,
+              name,
+              lat,
+              lng,
+            }
+            target.stops = Array.isArray(target.stops) ? target.stops : []
+            const at = target.stops.findIndex((stop) => String(stop.id) === stopId)
+            if (at >= 0) target.stops[at] = next
+            else target.stops.push(next)
+            continue
+          }
           if (op.op === 'updateStop') {
             const found = stopOf(op.stopId)
             if (!found) throw new RoamError('stop-not-found', `stop '${op.stopId}' was not found`, 404)

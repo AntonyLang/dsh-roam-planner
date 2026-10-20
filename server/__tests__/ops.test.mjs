@@ -118,6 +118,36 @@ await check('moveStop honours toIndex for ordering', () => {
   assert.equal(day1.stops[0].id, 'a')
 })
 
+const dayWrite = await call({
+  ops: [
+    {
+      op: 'setDay',
+      index: 0,
+      day: { index: 0, date: '2026-10-24', stops: [{ id: 'x1', name: '金鸡湖', lat: 31.31, lng: 120.7 }], legs: [] },
+    },
+  ],
+})
+await check('setDay overwrites exactly one day', () => {
+  const day0 = dayWrite.json.days.find((row) => row.index === 0)
+  assert.equal(day0.stops.length, 1)
+  assert.equal(day0.stops[0].name, '金鸡湖')
+  assert.equal(dayWrite.json.days.find((row) => row.index === 1).stops.length, 2)
+})
+
+const stopWrite = await call({
+  ops: [{ op: 'setStop', dayIndex: 1, stop: { id: 'x2', name: '虎丘塔', lat: 31.34, lng: 120.57 } }],
+})
+await check('setStop appends a new stop without touching the rest', () => {
+  const day1 = stopWrite.json.days.find((row) => row.index === 1)
+  assert.equal(day1.stops.length, 3)
+  assert.equal(day1.stops[2].name, '虎丘塔')
+})
+
+const dayGone = await call({ ops: [{ op: 'removeDay', index: 1 }] })
+await check('removeDay drops the day', () => {
+  assert.equal(dayGone.json.days.length, 1)
+})
+
 const renamed = await call({ ops: [{ op: 'setTitle', title: '苏州两日 · 慢游' }] })
 await check('setTitle renames the trip', () => {
   assert.equal(renamed.json.title, '苏州两日 · 慢游')
@@ -128,4 +158,5 @@ await check('an unknown stop is a 404', () => assert.equal(bad.status, 404))
 
 console.log(failed === 0 ? '\nops checks passed' : `\n${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
+
 

@@ -393,6 +393,109 @@ export function registerTools(ctx, trips, options = {}) {
   })
 
   register({
+    name: 'roam_update_day',
+    description:
+      'Replace ONE day of the trip. Unlike roam_prepare_draft it leaves the other days untouched, so two writers can work on different days without clobbering each other. Use it for incremental edits; stops without coordinates are geocoded in the given city.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tripId: { type: 'string', description: 'Trip id from roam_get_snapshot.' },
+        city: { type: 'string', description: 'City used to disambiguate the names in this day.' },
+        day: {
+          type: 'object',
+          properties: {
+            index: { type: 'number', description: '0-based day index; existing day is replaced, a new index is appended.' },
+            date: { type: 'string', description: 'Calendar date, YYYY-MM-DD.' },
+            stops: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  lat: { type: 'number' },
+                  lng: { type: 'number' },
+                  start: { type: 'string' },
+                  stayMinutes: { type: 'number' },
+                  category: { type: 'string', enum: ['sight', 'food', 'stay', 'transit'] },
+                  note: { type: 'string' },
+                },
+                required: ['name'],
+                additionalProperties: false,
+              },
+            },
+            legs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  from: { type: 'string' },
+                  to: { type: 'string' },
+                  mode: { type: 'string', enum: ['walk', 'transit', 'drive'] },
+                  minutes: { type: 'number' },
+                },
+                required: ['from', 'to', 'mode'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['index', 'date', 'stops', 'legs'],
+          additionalProperties: false,
+        },
+      },
+      required: ['tripId', 'day'],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: 'object',
+        properties: {
+          tripId: { type: 'string' },
+          revision: { type: 'number' },
+          status: statusSchema,
+          title: { type: 'string' },
+          index: { type: 'number' },
+          geocoded: { type: 'array', items: { type: 'object', properties: {}, additionalProperties: true } },
+        },
+        required: ['tripId', 'revision', 'status', 'title', 'index', 'geocoded'],
+        additionalProperties: false,
+      },
+      render(_args, value) {
+        const lines = [
+          `Day ${(value?.index ?? 0) + 1} replaced in "${value?.title || 'Untitled trip'}" (revision ${value?.revision ?? '?'}).`,
+        ]
+        const hits = Array.isArray(value?.geocoded) ? value.geocoded : []
+        for (const hit of hits) lines.push(`  ${hit.name} -> ${hit.lat}, ${hit.lng} (${hit.provider})`)
+        return textBlock(lines.join('\n'))
+      },
+    },
+    async execute(args, exec) {
+      const key = sessionKey(exec)
+      const tripId = requireTripId(args)
+      const day = args?.day && typeof args.day === 'object' ? args.day : null
+      if (!day || !Number.isFinite(day.index)) throw new Error('day.index is required')
+      const view = await trips.resolveTrip(key, tripId)
+      const resolved = await resolveStopCoordinates([day], {
+        city: args.city ?? defaultCity,
+        geocoder,
+        sources,
+      })
+      const nextDay = resolved.days[0]
+      const days = Array.isArray(view.days) ? view.days.map((row) => JSON.parse(JSON.stringify(row))) : []
+      const at = days.findIndex((row) => Number(row.index) === Number(nextDay.index))
+      if (at >= 0) days[at] = nextDay
+      else days.push(nextDay)
+      const result = await trips.updateDraft(view.tripId, { days })
+      return {
+        ...result,
+        title: view.title,
+        index: Number(nextDay.index),
+        geocoded: resolved.report,
+      }
+    },
+  })
+
+  register({
     name: 'roam_save_candidate',
     description:
       'Freeze the current draft into a candidate so the user can review it on the map page. Only a draft can become a candidate; the candidate version increments.',

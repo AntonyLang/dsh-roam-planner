@@ -11,33 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Trusted Publishing: GitHub mints a short-lived OIDC token that npm
+      # exchanges for publish rights. No NPM_TOKEN secret is involved.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm >= 11.5.1; the bundled one is older.
+      - run: npm install -g npm@latest
+      - run: npm --version
       # Lifecycle scripts are skipped: the client bundle is committed.
       - run: npm install --ignore-scripts
       - run: npm run typecheck
       - run: npm test
-
-      # Without a token the publish step cannot work, and a red run on every tag
-      # is just noise. Report it and keep the job green.
-      - name: Check for the publish token
-        id: token
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "::warning::NPM_TOKEN is not configured; skipping npm publish."
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Publish to npm
-        if: steps.token.outputs.available == 'true'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

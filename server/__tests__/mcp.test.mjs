@@ -205,6 +205,32 @@ await check('an unknown server rejects with a readable message', async () => {
   })
 }
 
+/* --- configured headers reach the HTTP request ----------------------- */
+{
+  const seen = []
+  const bridge = createMcpBridge({
+    config: {
+      mcpServers: [
+        { name: 'web', transport: 'http', url: 'http://127.0.0.1:9/mcp', headers: { Authorization: 'Bearer t0k' } },
+      ],
+    },
+    fetchImpl: async (url, options) => {
+      seen.push(options.headers)
+      return {
+        ok: true,
+        headers: new Map([['content-type', 'application/json']]),
+        status: 200,
+        text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { tools: [] } }),
+      }
+    },
+  })
+  await bridge.listTools('web').catch(() => {})
+  await check('configured headers are sent with the request', () => {
+    assert.ok(seen.length > 0, 'no request was made')
+    assert.equal(seen[0].Authorization, 'Bearer t0k')
+  })
+}
+
 /* --- a dead server is replaced on the next call ---------------------- */
 {
   let spawns = 0
@@ -235,4 +261,5 @@ await check('an unknown server rejects with a readable message', async () => {
 stdioBridge.close()
 console.log(failed === 0 ? '\nMCP bridge checks passed' : `\n${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
+
 

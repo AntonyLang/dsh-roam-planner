@@ -308,6 +308,8 @@ export function createMcpBridge(options = {}) {
       const headers = {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
+        // Configured headers carry credentials such as a bearer token.
+        ...(def.headers && typeof def.headers === 'object' ? def.headers : {}),
       }
       if (sessionId) headers['mcp-session-id'] = sessionId
       let response

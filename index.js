@@ -32,6 +32,27 @@ const DEFAULTS = {
 }
 
 /** External MCP sidecars: `{ name, command, args, env, cwd }`. */
+/**
+ * Request headers for an HTTP sidecar. Values may reference an environment
+ * variable as `${env:NAME}`, so a token can stay out of the config file.
+ *
+ * @param {unknown} value
+ * @returns {Record<string, string> | null}
+ */
+function normalizeHeaders(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const headers = /** @type {Record<string, string>} */ ({})
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== 'string') continue
+    const name = key.trim()
+    if (!name) continue
+    headers[name] = raw.replace(/\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_match, variable) =>
+      process.env[variable] ?? '',
+    )
+  }
+  return Object.keys(headers).length > 0 ? headers : null
+}
+
 function normalizeMcpServers(value) {
   if (!Array.isArray(value)) return []
   const servers = []
@@ -57,6 +78,7 @@ function normalizeMcpServers(value) {
         transport,
         url,
         ...(command ? { command, args, env, cwd } : {}),
+        ...(normalizeHeaders(raw.headers) ? { headers: normalizeHeaders(raw.headers) } : {}),
         ...(Number.isFinite(raw.startupTimeoutMs) ? { startupTimeoutMs: raw.startupTimeoutMs } : {}),
       })
       continue

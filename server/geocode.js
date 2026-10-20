@@ -24,6 +24,8 @@ const USER_AGENT = 'dsh-roam-planner/0.0.0 (local trip planner; geocoding on dem
 
 /** Nominatim asks for at most one request per second. */
 const NOMINATIM_MIN_GAP_MS = 1100
+/** Amap's free tier allows a few queries per second; stay well under it. */
+const AMAP_MIN_GAP_MS = 450
 
 /** Tried only when the first hit was an administrative area. */
 const RETRY_SUFFIXES = ['山', '公园', '景区']
@@ -68,6 +70,7 @@ export function createGeocoder(options = {}) {
   const doFetch = fetchImpl || globalThis.fetch
   const cache = new Map()
   let lastNominatim = 0
+  let lastAmap = 0
 
   /**
    * A key set through the settings page switches the provider at the next call,
@@ -92,6 +95,18 @@ export function createGeocoder(options = {}) {
     const wait = lastNominatim + NOMINATIM_MIN_GAP_MS - now
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
     lastNominatim = Date.now()
+  }
+
+  /** Amap's free tier enforces a queries-per-second cap, not just a daily one. */
+  async function throttleAmap() {
+    const now = Date.now()
+    const wait = lastAmap + AMAP_MIN_GAP_MS - now
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+    lastAmap = Date.now()
+  }
+
+  function isQuotaError(error) {
+    return /CUQPS|EXCEEDED|LIMIT/i.test(String(error && error.message ? error.message : error))
   }
 
   function normalizeNominatim(row) {
@@ -123,6 +138,7 @@ export function createGeocoder(options = {}) {
   }
 
   async function amapSearch(place, city, key, signal) {
+    await throttleAmap()
     const params = new URLSearchParams({ key, address: place })
     if (city) params.set('city', city)
     const response = await doFetch(`${AMAP_URL}?${params.toString()}`, {
@@ -194,8 +210,15 @@ export function createGeocoder(options = {}) {
           ? await amapSearch(place, city, key, signal)
           : await resolveNominatim(place, city, signal)
     } catch (error) {
-      logger?.warn?.(`dsh-roam-planner: geocode "${place}" failed: ${error?.message || error}`)
-      throw error
+      // Amap's quota is easy to hit on a burst; OSM still answers, so a place
+      // name should degrade in accuracy rather than fail the whole draft.
+      if (mode === 'amap' && isQuotaError(error)) {
+        logger?.warn?.(`dsh-roam-planner: amap quota hit for "${place}", falling back to nominatim`)
+        hit = await resolveNominatim(place, city, signal)
+      } else {
+        logger?.warn?.(`dsh-roam-planner: geocode "${place}" failed: ${error?.message || error}`)
+        throw error
+      }
     }
     if (hit) {
       if (hit.ambiguous) logger?.warn?.(`dsh-roam-planner: geocode "${place}" is ambiguous: ${hit.warning}`)
@@ -206,6 +229,7 @@ export function createGeocoder(options = {}) {
 
   return { geocode, resolveMode }
 }
+
 
 
 

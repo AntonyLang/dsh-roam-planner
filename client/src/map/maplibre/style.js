@@ -16,6 +16,7 @@ export const SRC_LEGS = 'roam-legs'
 export const LYR_BG = 'roam-basemap-background'
 export const LYR_BASE = 'roam-basemap-raster'
 export const LYR_LEGS = 'roam-legs-line'
+export const LYR_LEGS_DASHED = 'roam-legs-dashed'
 export const LYR_STOPS = 'roam-stops-circle'
 export const LYR_STOPS_SELECTED = 'roam-stops-selected'
 
@@ -149,11 +150,32 @@ export function legsLayer() {
     id: LYR_LEGS,
     type: 'line',
     source: SRC_LEGS,
+    filter: ['!=', ['get', 'dashed'], true],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': dayColorExpression(),
       'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.2, 10, 2.4, 15, 4],
       'line-opacity': 0.72,
+    },
+  }
+}
+
+/**
+ * Legs without provider geometry: intercity hops and straight-line fallbacks.
+ * Dashed so nobody mistakes them for a real road.
+ */
+export function legsDashedLayer() {
+  return {
+    id: LYR_LEGS_DASHED,
+    type: 'line',
+    source: SRC_LEGS,
+    filter: ['==', ['get', 'dashed'], true],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': dayColorExpression(),
+      'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1, 10, 1.8, 15, 2.6],
+      'line-opacity': 0.55,
+      'line-dasharray': [2, 2],
     },
   }
 }
@@ -197,10 +219,12 @@ export function selectedStopLayer(selectedStopId) {
 
 /** Layers added on top of the basemap, bottom to top. */
 export function overlayLayers(selectedStopId) {
-  return [legsLayer(), stopsLayer(), selectedStopLayer(selectedStopId)]
+  return [legsLayer(), legsDashedLayer(), stopsLayer(), selectedStopLayer(selectedStopId)]
 }
 
 /** Filter for one day (or everything). */
 export function dayFilter(selectedDay) {
   return selectedDay == null ? null : ['==', ['get', 'dayIndex'], Number(selectedDay)]
 }
+
+

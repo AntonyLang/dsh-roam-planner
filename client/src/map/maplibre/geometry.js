@@ -88,6 +88,7 @@ export function buildGeometry(view, basemapCrs) {
         if (from && to) coordinates = [[from.lng, from.lat], [to.lng, to.lat]]
       }
       if (coordinates.length < 2) return
+      const approximate = !(Array.isArray(leg.geometry) && leg.geometry.length >= 2)
       legFeatures.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates },
@@ -97,10 +98,49 @@ export function buildGeometry(view, basemapCrs) {
           to: leg.to == null ? '' : String(leg.to),
           mode: leg.mode || 'walk',
           label: String(dayIndex + 1),
+          // A straight line is not a road: draw it dashed so it reads as a hint.
+          dashed: approximate,
         },
       })
     })
   })
+
+  // Consecutive days rarely carry an explicit leg (intercity hops), so connect
+  // them with a dashed line. Without this the map looks broken between cities.
+  const dayStops = days.map((day, order) => {
+    const index = Number.isFinite(day && day.index) ? day.index : order
+    const stops = Array.isArray(day && day.stops)
+      ? day.stops.filter((stop) => stop && stop.id != null)
+      : []
+    return { index, stops }
+  })
+  for (let position = 0; position < dayStops.length - 1; position += 1) {
+    const current = dayStops[position]
+    const next = dayStops[position + 1]
+    if (current.stops.length === 0 || next.stops.length === 0) continue
+    const fromId = String(current.stops[current.stops.length - 1].id)
+    const toId = String(next.stops[0].id)
+    const linked = legFeatures.some(
+      (feature) => feature.properties.from === fromId && feature.properties.to === toId,
+    )
+    if (linked) continue
+    const from = stopsById.get(fromId)
+    const to = stopsById.get(toId)
+    if (!from || !to) continue
+    legFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
+      properties: {
+        dayIndex: current.index,
+        from: fromId,
+        to: toId,
+        mode: 'transit',
+        label: '',
+        dashed: true,
+        intercity: true,
+      },
+    })
+  }
 
   return {
     stops: { type: 'FeatureCollection', features: stopFeatures },

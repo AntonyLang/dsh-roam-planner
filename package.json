@@ -25,7 +25,8 @@
     "icon.svg",
     "README.md",
     "LICENSE",
-    "PROVENANCE.md"
+    "PROVENANCE.md",
+    "skills"
   ],
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -46,6 +46,7 @@ import {
   LYR_BG,
   LYR_BASE,
   LYR_LEGS,
+  LYR_LEGS_DASHED,
   LYR_STOPS,
   LYR_STOPS_SELECTED,
   overlayLayers,
@@ -76,6 +77,27 @@ const OVERLAY_CSS = [
 /* Map helpers                                                         */
 /* ------------------------------------------------------------------ */
 
+function boundsForDay(geometry, dayIndex) {
+  const features = geometry && geometry.stops ? geometry.stops.features : []
+  let west = Infinity
+  let south = Infinity
+  let east = -Infinity
+  let north = -Infinity
+  let count = 0
+  for (const feature of features) {
+    if (!feature || !feature.geometry || !Array.isArray(feature.geometry.coordinates)) continue
+    if (dayIndex !== null && feature.properties && Number(feature.properties.dayIndex) !== dayIndex) continue
+    const [lng, lat] = feature.geometry.coordinates
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+    west = Math.min(west, lng)
+    east = Math.max(east, lng)
+    south = Math.min(south, lat)
+    north = Math.max(north, lat)
+    count += 1
+  }
+  return count === 0 ? null : [[west, south], [east, north]]
+}
+
 function addSourcesAndLayers(map, geometry) {
   if (!map.getSource(SRC_STOPS)) {
     map.addSource(SRC_STOPS, { type: 'geojson', data: geometry.stops })
@@ -96,6 +118,7 @@ function addSourcesAndLayers(map, geometry) {
   // custom style ships its own layers.
   try {
     if (map.getLayer(LYR_LEGS)) map.moveLayer(LYR_LEGS)
+    if (map.getLayer(LYR_LEGS_DASHED)) map.moveLayer(LYR_LEGS_DASHED)
     if (map.getLayer(LYR_STOPS)) map.moveLayer(LYR_STOPS)
     if (map.getLayer(LYR_STOPS_SELECTED)) map.moveLayer(LYR_STOPS_SELECTED)
   } catch (_err) {
@@ -129,6 +152,7 @@ function applyOverlayFilters(map, selectedDay, selectedStopId) {
   const day = dayFilter(selectedDay)
   if (map.getLayer(LYR_STOPS)) map.setFilter(LYR_STOPS, day)
   if (map.getLayer(LYR_LEGS)) map.setFilter(LYR_LEGS, day)
+  if (map.getLayer(LYR_LEGS_DASHED)) map.setFilter(LYR_LEGS_DASHED, day)
   if (map.getLayer(LYR_STOPS_SELECTED)) {
     const selection = selectionFilter(selectedStopId)
     map.setFilter(LYR_STOPS_SELECTED, day ? ['all', day, selection] : selection)
@@ -424,15 +448,25 @@ export function MapLibreMap(props) {
     }
   }, [geometry, view && view.tripId, view && view.revision])
 
-  /* --- selected day: filter the overlay layers ---------------------- */
+  /* --- selected day: filter the overlay layers and frame that day ---- */
   React.useEffect(() => {
     const map = mapRef.current
     if (!map || !readyRef.current) return
     applyOverlayFilters(map, selectedDay, propsRef.current.selectedStopId)
     apiRef.current.update()
+    // A selected stop wins: the stop effect owns the camera in that case.
+    if (propsRef.current.selectedStopId) return
+    const bounds = boundsForDay(geometryRef.current, selectedDay == null ? null : Number(selectedDay))
+    if (!bounds) return
+    const [[west, south], [east, north]] = bounds
+    if (west === east && south === north) {
+      map.easeTo({ center: [west, south], zoom: 14.5, duration: 700, essential: true })
+      return
+    }
+    map.fitBounds(bounds, { padding: FIT_PADDING, maxZoom: 13, duration: 700 })
   }, [selectedDay])
 
-  /* --- selected stop: enlarge + gently move the camera -------------- */
+  /* --- selected stop: enlarge + fly to it --------------------------- */
   React.useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -446,11 +480,10 @@ export function MapLibreMap(props) {
     )
     if (!feature) return
     const lngLat = feature.geometry.coordinates
-    if (pointIsInView(map, lngLat, 72)) return
     map.easeTo({
       center: lngLat,
-      zoom: Math.max(map.getZoom(), 13),
-      duration: 650,
+      zoom: Math.max(map.getZoom(), 15),
+      duration: 600,
       essential: true,
     })
   }, [selectedStopId])
@@ -514,3 +547,4 @@ export function MapLibreMap(props) {
     </div>
   )
 }
+

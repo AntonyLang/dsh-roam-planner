@@ -1,0 +1,9 @@
+# build and dependency output
+node_modules/
+tools/
+tmp/
+.npm-cache/
+
+# local logs and packaging output
+*.log
+*.tgz

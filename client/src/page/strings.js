@@ -1,0 +1,113 @@
+/**
+ * Every user-visible string in the Roam Planner client shell.
+ *
+ * 全中文界面。文案集中在这里，组件不直接写死句子。
+ */
+export const STRINGS = Object.freeze({
+  panelTitle: '行程工作台',
+  tagline: '每天去哪、怎么走、一眼看清',
+
+  loading: '正在加载行程…',
+  emptyTitle: '还没有行程',
+  emptyBody: '在对话里让助手规划一条，之后就会出现在这里。',
+  errorTitle: '行程加载失败',
+  errorRetry: '重试',
+  untitledTrip: '未命名行程',
+  unknownDate: '日期未定',
+
+  tripPicker: '行程',
+  itinerary: '每日安排',
+  allDays: '全部',
+  wholeTrip: '整趟',
+  day: '第',
+  daySuffix: '天',
+  dayLower: '天',
+  daysLower: '天',
+  stopLower: '站',
+  stopsLower: '站',
+  noStops: '还没有安排',
+
+  basemap: '底图',
+  refresh: '刷新',
+  adopt: '采用方案',
+  adopting: '采用中…',
+  candidateHint: '助手已生成候选方案，确认地图没问题后点采用。',
+  newTrip: '新建行程',
+  newTripTitle: '新行程',
+  rename: '改名',
+  moveToDay: '移到',
+  moveUp: '上移',
+  moveDown: '下移',
+
+  status: Object.freeze({
+    draft: '草稿',
+    candidate: '候选',
+    adopted: '已采用',
+  }),
+  revision: '第',
+  revisionSuffix: '版',
+
+  mapLabel: '行程地图',
+  selectedStop: '选中地点',
+  unnamedStop: '未命名地点',
+  starts: '出发',
+  stay: '停留',
+  minutes: '分钟',
+  note: '备注',
+  clearSelection: '取消选中',
+
+  mapEmptyTitle: '没有可显示的内容',
+  mapEmptyBody: '选一条有地点的行程，就会显示在地图上。',
+  hostUnavailable: '行程服务未启动，请重启 DSH 让插件加载接口。',
+
+  changesTitle: '与已采用方案的差异',
+  added: '新增',
+  removed: '删除',
+  moved: '换天',
+  retimed: '改时间',
+  reDated: '改日期',
+  renamed: '改标题',
+
+  amapPromptTitle: '要配置高德 key 吗？',
+  amapPromptBody: '不配也能用，但中文地址用高德解析准确得多。也可以稍后在设置里添加。',
+  amapPromptLater: '以后再说',
+  amapBarText: '未配置高德 key，中文地址暂用 OpenStreetMap 兜底。',
+  amapBarAction: '去配置',
+
+  hide: '收起',
+  modes: Object.freeze({ walk: '步行', drive: '驾车', transit: '公交' }),
+  stopNameLabel: '地点名称',
+  startLabel: '出发时间',
+  stayLabel: '停留（分钟）',
+  delete: '删除',
+  add: '添加',
+  addStopPlaceholder: '按名称添加地点…',
+  saving: '保存中…',
+  currentTrip: '当前旅程：',
+
+  mcpTitle: '外部数据源（MCP）',
+  mcpLoading: '正在检查已配置的数据源…',
+  mcpConfigured: '已配置',
+  mcpEmpty: '还没有配置数据源。可选接入：',
+  mcpRailwayHint: '火车票查询，走内置的铁路代理（可按时间窗、车站、条数筛选）。',
+  mcpXhsHint: '笔记搜索；需要先登录一次，并会下载约 150 MB 的浏览器。',
+  mcpSnippet:
+    'mcpServers:\n  - name: railway\n    command: node\n    args: ["<插件目录>/server/railway-mcp.js"]\n    env:\n      RAILWAY_PYTHON: <装有 mcp-server-12306 的 python>\n      RAILWAY_PYTHONPATH: <其 site-packages>',
+  mcpXhsSnippet:
+    'mcpServers:\n  - name: xhs\n    transport: http\n    url: http://127.0.0.1:18060/mcp',
+
+  settingsTitle: '行程工作台设置',
+  settingsIntro: '可选。填入高德 Web 服务 key 后，地点解析和路线规划会切到高德，中文地址比免费兜底准确得多。',
+  settingsLoading: '正在检查配置…',
+  amapKeyLabel: '高德 Web 服务 key',
+  amapKeyPlaceholder: '粘贴你的 key',
+  amapKeyConfigured: '已配置 key',
+  amapKeyMissing: '未配置，正在使用免费兜底',
+  amapKeySaved: '已保存，下一次解析和路线就会走高德。',
+  amapKeyCleared: '已移除，地点解析和路线回落到 OSM/OSRM。',
+  amapKeyHint: 'key 存在宿主的凭据库里，不会回传到本页面。请使用「Web 服务」类型的 key，不是 JS API key。',
+  routingLabel: '路线',
+  geocodingLabel: '地点解析',
+  save: '保存',
+  clear: '移除',
+})

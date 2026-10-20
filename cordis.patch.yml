@@ -36,5 +36,6 @@
 
 - insert:
     - id: roam-planner
-      name: '@antony/dsh-roam-planner'
+      name: 'dsh-roam-planner'
       config: {}
+

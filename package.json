@@ -1,5 +1,5 @@
 {
-  "name": "@antony/dsh-roam-planner",
+  "name": "dsh-roam-planner",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -69,3 +69,4 @@
     "access": "public"
   }
 }
+

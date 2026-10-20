@@ -14,7 +14,7 @@ import { TripBadge } from './page/TripBadge.jsx'
 import { STRINGS } from './page/strings.js'
 
 /** Must equal `package.json` `name`. */
-export const PACKAGE_ID = '@antony/dsh-roam-planner'
+export const PACKAGE_ID = 'dsh-roam-planner'
 
 /** Shared key: the `main` slot key and the sidebar panellist id. */
 export const PANEL_KEY = 'roam-planner'
@@ -98,4 +98,5 @@ export function apply(ctx) {
     ),
   )
 }
+
 

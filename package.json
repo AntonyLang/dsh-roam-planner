@@ -45,6 +45,27 @@
   },
   "scripts": {
     "build": "node scripts/build-client.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AntonyLang/dsh-roam-planner.git"
+  },
+  "homepage": "https://github.com/AntonyLang/dsh-roam-planner#readme",
+  "bugs": {
+    "url": "https://github.com/AntonyLang/dsh-roam-planner/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "travel",
+    "trip-planner",
+    "map",
+    "mcp"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }

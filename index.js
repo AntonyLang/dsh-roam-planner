@@ -16,6 +16,8 @@ import { createGeocoder } from './server/geocode.js'
 import { createSources } from './server/sources.js'
 import { createSettings } from './server/settings.js'
 import { createMcpBridge } from './server/mcp.js'
+import { registerBundledSkills } from './server/skill.js'
+import { fileURLToPath } from 'node:url'
 
 const DEFAULTS = {
   basemapId: 'osm',
@@ -182,7 +184,7 @@ export const Config = {
   },
 }
 
-export const inject = ['tools', 'webServer']
+export const inject = ['tools', 'webServer', 'skills']
 
 /** Resolve the fallback data directory for the JSON file store. */
 function resolveDataDir(ctx) {
@@ -215,7 +217,15 @@ export function apply(ctx, rawConfig) {
 
   const mcp = createMcpBridge({ config, logger: ctx.logger })
 
+  // Skills ship inside the package; the host does not scan for them, so they
+  // are pushed into the registry while applying and removed on teardown.
+  const skillsDir = fileURLToPath(new URL('./skills/', import.meta.url))
+
   ctx.effect(() => {
+    const skills = registerBundledSkills(ctx, skillsDir)
+    for (const entry of skills.report) {
+      if (!entry.ok) ctx.logger?.warn?.(`dsh-roam-planner: skill ${entry.name || '(bundle)'} — ${entry.detail}`)
+    }
     const disposeTools = registerTools(ctx, trips, {
       geocoder,
       sources,
@@ -230,8 +240,12 @@ export function apply(ctx, rawConfig) {
         try {
           disposeTools()
         } finally {
-          mcp.close()
-          await store.close()
+          try {
+            skills.dispose()
+          } finally {
+            mcp.close()
+            await store.close()
+          }
         }
       }
     }
@@ -239,4 +253,5 @@ export function apply(ctx, rawConfig) {
 
   ctx.logger?.info?.(`dsh-roam-planner: /roam/api mounted (basemap ${config.basemapId}, geocoder ${config.geocoder}, data dir ${dataDir})`)
 }
+
 

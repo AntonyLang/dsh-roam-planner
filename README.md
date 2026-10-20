@@ -92,8 +92,10 @@ station filter and a row cap instead of an entire day of trains:
           RAILWAY_PYTHONPATH: 'C:\...\site-packages'
 ```
 
-A raw `streamable http` sidecar is configured the same way with
-`transport: http` and `url`.
+A raw `streamable http` sidecar is configured with `transport: http` and
+`url`. Add `command` (plus optional `args`/`env`) and the bridge starts
+the process on first use, waits for the port and then speaks HTTP — nothing has
+to be launched by hand.
 
 | Sidecar | Source | Notes |
 |---|---|---|
@@ -135,3 +137,4 @@ A raw `streamable http` sidecar is configured the same way with
 MIT — see [LICENSE](LICENSE). This is an independent implementation; see
 [PROVENANCE.md](PROVENANCE.md) for the boundary against the upstream project it
 was inspired by.
+

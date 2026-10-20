@@ -11,12 +11,46 @@
  */
 
 import { spawn as nodeSpawn } from 'node:child_process'
+import net from 'node:net'
 
 const PROTOCOL_VERSION = '2024-11-05'
 const CALL_TIMEOUT_MS = 30000
 const INIT_TIMEOUT_MS = 20000
 /** A sidecar can return hundreds of kilobytes; the model gets the head only. */
 const MAX_TEXT_CHARS = 12000
+/** How long a spawned HTTP sidecar may take to start listening. */
+const STARTUP_TIMEOUT_MS = 45000
+
+function endpointOf(url) {
+  try {
+    const parsed = new URL(url)
+    const port = Number(parsed.port) || (parsed.protocol === 'https:' ? 443 : 80)
+    return { host: parsed.hostname, port }
+  } catch (_error) {
+    return null
+  }
+}
+
+/** Resolve once something accepts a TCP connection on host:port. */
+function waitForPort(host, port, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs
+    const attempt = () => {
+      const socket = net.connect({ host, port })
+      const retry = (error) => {
+        socket.destroy()
+        if (Date.now() > deadline) reject(error || new Error(`port ${host}:${port} did not open`))
+        else setTimeout(attempt, 300)
+      }
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve()
+      })
+      socket.once('error', retry)
+    }
+    attempt()
+  })
+}
 
 function envelopeError(message) {
   return new Error(message?.error?.message || 'MCP error')
@@ -214,6 +248,60 @@ export function createMcpBridge(options = {}) {
     let sessionId = null
     let nextId = 1
     let closed = false
+    let child = null
+
+    /**
+     * Hybrid mode: an HTTP sidecar that also carries `command` is started on
+     * demand. If the port already answers, someone else owns it and we leave it
+     * alone.
+     */
+    async function ensureStarted() {
+      if (!def.command) return
+      const endpoint = endpointOf(def.url)
+      if (!endpoint) throw new Error(`MCP server "${def.name}" has an invalid url`)
+
+      try {
+        await waitForPort(endpoint.host, endpoint.port, 600)
+        return
+      } catch (_error) {
+        /* nothing listening yet: start it */
+      }
+
+      const spawner = spawnImpl || nodeSpawn
+      let stderr = ''
+      child = spawner(def.command, Array.isArray(def.args) ? def.args : [], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ...(def.env && typeof def.env === 'object' ? def.env : {}) },
+        cwd: typeof def.cwd === 'string' && def.cwd ? def.cwd : undefined,
+        windowsHide: true,
+      })
+      child.stderr?.setEncoding?.('utf8')
+      child.stderr?.on?.('data', (chunk) => {
+        stderr = (stderr + chunk).slice(-2000)
+      })
+      child.on?.('exit', (code) => {
+        closed = true
+        child = null
+        onDead?.()
+        logger?.warn?.(`dsh-roam-planner: MCP server "${def.name}" exited (code ${code})${stderr ? ': ' + stderr.slice(-300) : ''}`)
+      })
+
+      try {
+        await waitForPort(endpoint.host, endpoint.port, Number(def.startupTimeoutMs) || STARTUP_TIMEOUT_MS)
+      } catch (error) {
+        closed = true
+        try {
+          child.kill()
+        } catch (_killError) {
+          /* already gone */
+        }
+        child = null
+        onDead?.()
+        throw new Error(
+          `MCP server "${def.name}" did not start listening on ${endpoint.host}:${endpoint.port}${stderr ? ': ' + stderr.slice(-300) : ''}`,
+        )
+      }
+    }
 
     async function post(message, timeoutMs = CALL_TIMEOUT_MS) {
       if (closed) throw new Error(`MCP server "${def.name}" is closed`)
@@ -267,6 +355,7 @@ export function createMcpBridge(options = {}) {
     }
 
     const ready = (async () => {
+      await ensureStarted()
       await request(
         'initialize',
         {
@@ -285,6 +374,12 @@ export function createMcpBridge(options = {}) {
       ready,
       close() {
         closed = true
+        try {
+          child?.kill()
+        } catch (_error) {
+          /* already gone */
+        }
+        child = null
       },
     }
   }

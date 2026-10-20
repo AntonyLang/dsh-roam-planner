@@ -39,22 +39,29 @@ function normalizeMcpServers(value) {
     const transport = raw.transport === 'http' ? 'http' : 'stdio'
     if (!name) continue
     if (servers.some((entry) => entry.name === name)) continue
+
+    const command = typeof raw.command === 'string' ? raw.command.trim() : ''
+    const args = Array.isArray(raw.args) ? raw.args.filter((arg) => typeof arg === 'string') : []
+    const env = raw.env && typeof raw.env === 'object' && !Array.isArray(raw.env) ? raw.env : undefined
+    const cwd = typeof raw.cwd === 'string' && raw.cwd ? raw.cwd : undefined
+
     if (transport === 'http') {
       const url = typeof raw.url === 'string' ? raw.url.trim() : ''
       if (!url) continue
-      servers.push({ name, transport, url })
+      // Hybrid: an HTTP sidecar may also carry a command, which the bridge uses
+      // to start it on demand when nothing is listening on the port.
+      servers.push({
+        name,
+        transport,
+        url,
+        ...(command ? { command, args, env, cwd } : {}),
+        ...(Number.isFinite(raw.startupTimeoutMs) ? { startupTimeoutMs: raw.startupTimeoutMs } : {}),
+      })
       continue
     }
-    const command = typeof raw.command === 'string' ? raw.command.trim() : ''
+
     if (!command) continue
-    servers.push({
-      name,
-      transport,
-      command,
-      args: Array.isArray(raw.args) ? raw.args.filter((arg) => typeof arg === 'string') : [],
-      env: raw.env && typeof raw.env === 'object' && !Array.isArray(raw.env) ? raw.env : undefined,
-      cwd: typeof raw.cwd === 'string' && raw.cwd ? raw.cwd : undefined,
-    })
+    servers.push({ name, transport, command, args, env, cwd })
   }
   return servers
 }

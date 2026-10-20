@@ -7,3 +7,7 @@ tmp/
 # local logs and packaging output
 *.log
 *.tgz
+
+cookies.json
+xhs-data/
+*_qr.png

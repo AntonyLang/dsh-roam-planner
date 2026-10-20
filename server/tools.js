@@ -116,9 +116,81 @@ function renderDays(days) {
  * A stop may legally carry only a name; the geocoder fills lat/lng. The report
  * is returned to the model so it can see exactly where each name landed.
  */
-async function resolveStopCoordinates(days, { city, geocoder }) {
+/** How far a resolved stop may sit from its city before we distrust it. */
+const MAX_CITY_DISTANCE_KM = 80
+
+function distanceKm(a, b) {
+  if (!a || !b) return 0
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+}
+
+async function resolveStopCoordinates(days, { city, geocoder, sources }) {
   const report = []
   const resolvedDays = []
+  const needsGeocoding = days.some((day) =>
+    (Array.isArray(day.stops) ? day.stops : []).some(
+      (stop) => !(Number.isFinite(stop.lat) && Number.isFinite(stop.lng)),
+    ),
+  )
+  // Without a city the provider matches names country-wide; refuse rather than
+  // silently dropping stops in the wrong province.
+  if (needsGeocoding && !city) {
+    throw new Error(
+      'geocoding needs a city: pass "city" (e.g. 苏州) for every call that introduces places without coordinates',
+    )
+  }
+
+  let centerCache
+  const center = async () => {
+    if (centerCache !== undefined) return centerCache
+    centerCache = null
+    const remember = (row) => {
+      if (row && Number.isFinite(row.lat) && Number.isFinite(row.lng)) {
+        centerCache = { lat: row.lat, lng: row.lng }
+      }
+    }
+    try {
+      if (sources && typeof sources.searchPlaces === 'function') {
+        const places = await sources.searchPlaces({ keywords: city, city, limit: 1 })
+        remember(Array.isArray(places) ? places[0] : null)
+      }
+    } catch (_error) {
+      /* the centre is a safety net, not a requirement */
+    }
+    if (!centerCache && geocoder) {
+      try {
+        remember(await geocoder.geocode(city))
+      } catch (_error) {
+        /* ignore */
+      }
+    }
+    return centerCache
+  }
+
+  const searchPoi = async (name) => {
+    if (!sources || typeof sources.searchPlaces !== 'function') return null
+    try {
+      const places = await sources.searchPlaces({ keywords: name, city, limit: 1 })
+      const first = Array.isArray(places) ? places[0] : null
+      if (!first || !Number.isFinite(first.lat) || !Number.isFinite(first.lng)) return null
+      return {
+        lat: first.lat,
+        lng: first.lng,
+        label: first.name || first.address || '',
+        provider: 'amap-poi',
+        warning: '',
+      }
+    } catch (_error) {
+      return null
+    }
+  }
+
   for (const day of days) {
     const stops = []
     for (const stop of Array.isArray(day.stops) ? day.stops : []) {
@@ -130,12 +202,30 @@ async function resolveStopCoordinates(days, { city, geocoder }) {
       if (!geocoder) {
         throw new Error(`stop "${stop.name}" has no coordinates and geocoding is disabled`)
       }
-      const hit = await geocoder.geocode(stop.name, { city })
+      let hit = await geocoder.geocode(stop.name, { city })
       if (!hit) {
         throw new Error(
-          `could not locate "${stop.name}"${city ? ` in ${city}` : ''}; add verified lat/lng or a clearer name`,
+          `could not locate "${stop.name}" in ${city}; add verified lat/lng or a clearer name`,
         )
       }
+
+      // A hit hundreds of kilometres away means the provider matched the name
+      // somewhere else. Prefer a city-scoped POI lookup, then fail loudly.
+      const anchor = await center()
+      if (anchor) {
+        const away = distanceKm(hit, anchor)
+        if (away > MAX_CITY_DISTANCE_KM) {
+          const poi = await searchPoi(stop.name)
+          if (poi) {
+            hit = poi
+          } else {
+            throw new Error(
+              `"${stop.name}" resolved ${Math.round(away)} km from ${city} (${hit.lat}, ${hit.lng}); send verified lat/lng or a name that is unique in that city`,
+            )
+          }
+        }
+      }
+
       stops.push({ ...stop, lat: hit.lat, lng: hit.lng })
       report.push({
         name: stop.name,
@@ -289,7 +379,11 @@ export function registerTools(ctx, trips, options = {}) {
       if (args.title !== undefined) patch.title = args.title
       let geocoded = []
       if (args.days !== undefined) {
-        const resolved = await resolveStopCoordinates(args.days, { city: args.city ?? defaultCity, geocoder })
+        const resolved = await resolveStopCoordinates(args.days, {
+          city: args.city ?? defaultCity,
+          geocoder,
+          sources,
+        })
         patch.days = resolved.days
         geocoded = resolved.report
       }
@@ -794,4 +888,5 @@ export function registerTools(ctx, trips, options = {}) {
     }
   }
 }
+
 
